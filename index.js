@@ -1,5 +1,6 @@
 const express = require("express");
-const crypto = require("crypto");
+const bcrypt = require("bcrypt");
+
 
 const app = express();
 app.use(express.json());
@@ -8,48 +9,48 @@ const port = process.env.PORT || "8112";
 // in memory storage for now
 const users = {};
 
-app.get("/", (req,res) => {
-    res.send("Hello World!\n");
-});
+app.post("/api/v1/users/register", (req,res)  => {
+    const username = req.body.username || "";
+    const password = req.body.password || "";
 
-app.post("/users", (req,res) => {
-    const username = req.body.username || '';
-    const password = req.body.password || '';
-
-    // validation
+    res.setHeader("Content-Type", "application/json");
+    
     if(!username || !password || users[username]) {
-        res.status(400).send("Failed Validation\n");
+        res.status(400).send("Invalid user name or password.");
     }
 
-    let salt = crypto.randomBytes(128).toString('base64');
-
-    let hash = crypto.pbkdf2Sync(password, salt, 10000, 512, 'sha512');
-
-    users[username] = {salt , hash};
-
-    res.sendStatus(201);
+    bcrypt.hash(password, 10, (err, hash) => {
+        if(hash) {
+            users[username] = {hash};
+            res.sendStatus(200);
+        }
+        else {
+            res.sendStatus(500);
+        }
+        
+    });
 });
 
-app.post("/auth", (req,res) => {
-    const username = req.body.username;
-    const password = req.body.password;
+app.post("/api/v1/users/auth", (req,res) => {
+    const username = req.body.username || "";
+    const password = req.body.password || "";
 
-    // validation
     if(!username || !password || !users[username]) {
         res.sendStatus(400);
     }
 
-    const { salt , hash } = users[username];
+    const { hash } = users[username];
 
-    const generatedHash = crypto.pbkdf2Sync(password, salt, 10000, 512, 'sha512');
-
-    const valideHash = crypto.timingSafeEqual(generatedHash , hash);
-
-    console.log(valideHash);
-
-    res.sendStatus(valideHash ? 200 : 401);
+    bcrypt.compare(password, hash, (err, response) => {
+        // successfully compared password with hash
+        if(response) {
+            res.sendStatus(200);
+        }
+        else {
+            res.sendStatus(401);
+        }
+    });
 });
-
 
 app.listen(port, () => {
     console.log(`Server started on port: ${port}`);
